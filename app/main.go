@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 )
@@ -8,15 +9,19 @@ import (
 type Message struct {
 	Header   DNSHeader
 	Question []DNSQuestion
+	Answers  []DNSAnswers
 }
 
 func (m *Message) Bytes() []byte {
-	headerBytes := m.Header.Bytes()
-	questionBytes := make([]byte, 0)
+	var ret bytes.Buffer
+	ret.Write(m.Header.Bytes())
 	for _, question := range m.Question {
-		questionBytes = append(questionBytes, question.Bytes()...)
+		ret.Write(question.Bytes())
 	}
-	return append(headerBytes, questionBytes...)
+	for _, answer := range m.Answers {
+		ret.Write(answer.Bytes())
+	}
+	return ret.Bytes()
 }
 
 // echo "Your Message" | nc -u 127.0.0.1 2053
@@ -50,6 +55,15 @@ func main() {
 
 		response := Message{}
 
+		response.Answers = []DNSAnswers{{
+			Name:   "codecrafters.io",
+			Type:   1,
+			Class:  1,
+			TTL:    60,
+			Length: 4,
+			Data:   "8.8.8.8",
+		}}
+
 		response.Question = []DNSQuestion{{
 			Name:  "codecrafters.io",
 			Type:  1,
@@ -67,7 +81,7 @@ func main() {
 			Reserved:              0,
 			ResponseCode:          0,
 			QuestionCount:         uint16(len(response.Question)),
-			AnsRecordCount:        0,
+			AnsRecordCount:        uint16(len(response.Answers)),
 			AuthorityRecordCount:  0,
 			AdditionalRecordCount: 0,
 		}
