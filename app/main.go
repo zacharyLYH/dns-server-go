@@ -42,7 +42,6 @@ func main() {
 	defer udpConn.Close()
 
 	buf := make([]byte, 512)
-
 	for {
 		size, source, err := udpConn.ReadFromUDP(buf)
 		if err != nil {
@@ -50,8 +49,11 @@ func main() {
 			break
 		}
 
-		receivedData := string(buf[:size])
-		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
+		receivedHeader, err := ParseDNSHeader(buf[:size])
+
+		if err != nil {
+			fmt.Println(err)
+		}
 
 		response := Message{}
 
@@ -71,15 +73,20 @@ func main() {
 		}}
 
 		response.Header = DNSHeader{
-			PacketID:              1234,
-			QueryRespIndicator:    1,
-			OpCode:                0,
-			AuthoritiativeAns:     0,
-			Truncation:            0,
-			RecursionDesired:      0,
-			RecursionAvailable:    0,
-			Reserved:              0,
-			ResponseCode:          0,
+			PacketID:           receivedHeader.PacketID, //change
+			QueryRespIndicator: 1,
+			OpCode:             receivedHeader.OpCode, //change
+			AuthoritiativeAns:  0,
+			Truncation:         0,
+			RecursionDesired:   receivedHeader.RecursionDesired, //change
+			RecursionAvailable: 0,
+			Reserved:           0,
+			ResponseCode: func() uint8 {
+				if receivedHeader.OpCode == 0 {
+					return 0 // No error
+				}
+				return 4 // Not implemented
+			}(),
 			QuestionCount:         uint16(len(response.Question)),
 			AnsRecordCount:        uint16(len(response.Answers)),
 			AuthorityRecordCount:  0,
