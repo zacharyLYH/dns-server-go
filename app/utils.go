@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 )
 
@@ -63,4 +64,35 @@ func ParseDNSHeader(b []byte) (*DNSHeader, error) {
 	}
 
 	return header, nil
+}
+
+func ParseDNSQuestion(b []byte) (string, error) {
+	var name []byte
+	ptr := 0
+	// Parse the question name
+	for {
+		if ptr >= len(b) {
+			return "", fmt.Errorf("offset >= len(b)")
+		}
+		length := int(b[ptr])
+		fmt.Printf("Label length: %d, Remaining data: %v\n", length, b[ptr:])
+
+		ptr++
+		if length == 0 {
+			break // Name is terminated by a null byte
+		}
+		if ptr+length > len(b) {
+			return "", fmt.Errorf("ptr+length > len(b)")
+		}
+		name = append(name, b[ptr:ptr+length]...)
+		name = append(name, '.')
+		ptr += length
+	}
+
+	// Remove trailing dot
+	if len(name) > 0 {
+		name = name[:len(name)-1]
+	}
+
+	return string(name), nil
 }

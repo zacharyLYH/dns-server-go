@@ -49,16 +49,22 @@ func main() {
 			break
 		}
 
-		receivedHeader, err := ParseDNSHeader(buf[:size])
+		receivedHeader, headerErr := ParseDNSHeader(buf[:size])
 
-		if err != nil {
+		if headerErr != nil {
+			fmt.Println(err)
+		}
+
+		receivedQuestion, quesErr := ParseDNSQuestion(buf[12:])
+
+		if quesErr != nil {
 			fmt.Println(err)
 		}
 
 		response := Message{}
 
 		response.Answers = []DNSAnswers{{
-			Name:   "codecrafters.io",
+			Name:   receivedQuestion,
 			Type:   1,
 			Class:  1,
 			TTL:    60,
@@ -67,18 +73,18 @@ func main() {
 		}}
 
 		response.Question = []DNSQuestion{{
-			Name:  "codecrafters.io",
+			Name:  receivedQuestion,
 			Type:  1,
 			Class: 1,
 		}}
 
 		response.Header = DNSHeader{
-			PacketID:           receivedHeader.PacketID, //change
+			PacketID:           receivedHeader.PacketID,
 			QueryRespIndicator: 1,
-			OpCode:             receivedHeader.OpCode, //change
+			OpCode:             receivedHeader.OpCode,
 			AuthoritiativeAns:  0,
 			Truncation:         0,
-			RecursionDesired:   receivedHeader.RecursionDesired, //change
+			RecursionDesired:   receivedHeader.RecursionDesired,
 			RecursionAvailable: 0,
 			Reserved:           0,
 			ResponseCode: func() uint8 {
