@@ -5,6 +5,20 @@ import (
 	"net"
 )
 
+type Message struct {
+	Header   DNSHeader
+	Question []DNSQuestion
+}
+
+func (m *Message) Bytes() []byte {
+	headerBytes := m.Header.Bytes()
+	questionBytes := make([]byte, 0)
+	for _, question := range m.Question {
+		questionBytes = append(questionBytes, question.Bytes()...)
+	}
+	return append(headerBytes, questionBytes...)
+}
+
 // echo "Your Message" | nc -u 127.0.0.1 2053
 func main() {
 	fmt.Println("Logs from your program will appear here!")
@@ -34,7 +48,15 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
-		response := &DNSHeader{
+		response := Message{}
+
+		response.Question = []DNSQuestion{{
+			Name:  "codecrafters.io",
+			Type:  1,
+			Class: 1,
+		}}
+
+		response.Header = DNSHeader{
 			PacketID:              1234,
 			QueryRespIndicator:    1,
 			OpCode:                0,
@@ -44,7 +66,7 @@ func main() {
 			RecursionAvailable:    0,
 			Reserved:              0,
 			ResponseCode:          0,
-			QuestionCount:         0,
+			QuestionCount:         uint16(len(response.Question)),
 			AnsRecordCount:        0,
 			AuthorityRecordCount:  0,
 			AdditionalRecordCount: 0,
