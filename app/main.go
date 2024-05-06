@@ -3,16 +3,12 @@ package main
 import (
 	"fmt"
 	"net"
-	// Uncomment this block to pass the first stage
-	// "net"
 )
 
+// echo "Your Message" | nc -u 127.0.0.1 2053
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
 
-	// Uncomment this block to pass the first stage
-	//
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
 	if err != nil {
 		fmt.Println("Failed to resolve UDP address:", err)
@@ -38,10 +34,23 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 
-		// Create an empty response
-		response := []byte{}
+		response := &DNSHeader{
+			PacketID:              1234,
+			QueryRespIndicator:    1,
+			OpCode:                0,
+			AuthoritiativeAns:     0,
+			Truncation:            0,
+			RecursionDesired:      0,
+			RecursionAvailable:    0,
+			Reserved:              0,
+			ResponseCode:          0,
+			QuestionCount:         0,
+			AnsRecordCount:        0,
+			AuthorityRecordCount:  0,
+			AdditionalRecordCount: 0,
+		}
+		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 
-		_, err = udpConn.WriteToUDP(response, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
