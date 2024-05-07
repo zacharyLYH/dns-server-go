@@ -1,6 +1,9 @@
 package main
 
-import "bytes"
+import (
+	"bytes"
+	"net"
+)
 
 type DNSAnswers struct {
 	Name   string
@@ -8,7 +11,7 @@ type DNSAnswers struct {
 	Class  uint16
 	TTL    uint32
 	Length uint16
-	Data   string
+	Data   net.IP
 }
 
 func (records *DNSAnswers) Bytes() []byte {
@@ -18,6 +21,6 @@ func (records *DNSAnswers) Bytes() []byte {
 	appendBigEndian(&buff, records.Class)
 	appendBigEndian(&buff, records.TTL)
 	appendBigEndian(&buff, records.Length)
-	appendBigEndian(&buff, ipToBigEndian(records.Data))
+	appendBigEndian(&buff, ipToBigEndian(records.Data.String()))
 	return buff.Bytes()
 }

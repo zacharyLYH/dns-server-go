@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
+	"strings"
 )
 
 type Message struct {
@@ -27,6 +29,17 @@ func (m *Message) Bytes() []byte {
 // echo "Your Message" | nc -u 127.0.0.1 2053
 // stage 7 test: dig @127.0.0.1 -p 2053 codecrafters.io A codecrafters.io AAAA
 func main() {
+
+	ip, port := "", ""
+
+	if len(os.Args) > 1 {
+		if os.Args[1] != "--resolver" || len(os.Args) != 3 {
+			fmt.Println("usage: ./your_server --resolver <address>")
+		}
+		address := strings.Split(os.Args[2], ":")
+		ip = address[0]
+		port = address[1]
+	}
 	fmt.Println("Logs from your program will appear here!")
 
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
@@ -67,13 +80,21 @@ func main() {
 		response.Question = receivedQuestion
 
 		for _, ques := range receivedQuestion {
-			answer := DNSAnswers{
-				Name:   ques.Name,
-				Type:   1,
-				Class:  1,
-				TTL:    60,
-				Length: 4,
-				Data:   net.IPv4(8, 8, 8, 8).String(),
+			answer := DNSAnswers{}
+			if ip != "" && port != "" {
+				answer, err = forwardDnsQuery(ip, port, ques.Name)
+				if err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				answer = DNSAnswers{
+					Name:   ques.Name,
+					Type:   1,
+					Class:  1,
+					TTL:    60,
+					Length: 4,
+					Data:   net.IPv4(8, 8, 8, 8),
+				}
 			}
 			response.Answers = append(response.Answers, answer)
 		}

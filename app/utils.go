@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 )
 
 func encodeLabelName(value string) []byte {
@@ -147,4 +148,112 @@ func ParseDNSName(b []byte, offset int) (string, int, error) {
 		return string(name), originalOffset, nil
 	}
 	return string(name), offset, nil
+}
+
+func forwardDnsQuery(ip string, port string, dnsName string) (DNSAnswers, error) {
+	serverAddr := net.JoinHostPort(ip, port)
+	forwardMsg := Message{}
+	forwardMsg.Header = DNSHeader{
+		PacketID:              0x1234, // Example Packet ID
+		QueryRespIndicator:    0,
+		OpCode:                0,
+		AuthoritiativeAns:     0,
+		Truncation:            0,
+		RecursionDesired:      1, // Recursion desired
+		RecursionAvailable:    0,
+		Reserved:              0,
+		ResponseCode:          0,
+		QuestionCount:         1, // One question
+		AnsRecordCount:        0,
+		AuthorityRecordCount:  0,
+		AdditionalRecordCount: 0,
+	}
+
+	// Create the DNS question
+	forwardMsg.Question = []DNSQuestion{{
+		Name:  dnsName,
+		Type:  1, // Type A
+		Class: 1, // IN (Internet)
+	}}
+
+	// Send the query to the upstream DNS server
+	conn, err := net.Dial("udp", serverAddr)
+	if err != nil {
+		return DNSAnswers{}, err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(forwardMsg.Bytes())
+	if err != nil {
+		return DNSAnswers{}, err
+	}
+
+	// Receive the response
+	response := make([]byte, 512)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, err := conn.Read(response)
+	if err != nil {
+		return DNSAnswers{}, err
+	}
+
+	// Parse the DNS header
+	receivedHeader, err := ParseDNSHeader(response[:n])
+	if err != nil {
+		return DNSAnswers{}, err
+	}
+
+	// Skip the header
+	offset := 12
+
+	// Parse the question section
+	_, offset, err = ParseDNSName(response, offset)
+	if err != nil {
+		return DNSAnswers{}, err
+	}
+	offset += 4 // Skip Type and Class
+
+	// Parse the answer section
+	if receivedHeader.AnsRecordCount > 0 {
+		answer, _, err := ParseDNSAnswer(response, offset)
+		if err != nil {
+			return DNSAnswers{}, err
+		}
+		return answer, nil
+	}
+
+	return DNSAnswers{}, fmt.Errorf("no answers found in DNS response")
+}
+
+func ParseDNSAnswer(b []byte, offset int) (DNSAnswers, int, error) {
+	name, newOffset, err := ParseDNSName(b, offset)
+	if err != nil {
+		return DNSAnswers{}, 0, err
+	}
+	offset = newOffset
+
+	if offset+10 > len(b) {
+		return DNSAnswers{}, 0, fmt.Errorf("not enough data for DNS answer")
+	}
+
+	qType := binary.BigEndian.Uint16(b[offset : offset+2])
+	qClass := binary.BigEndian.Uint16(b[offset+2 : offset+4])
+	ttl := binary.BigEndian.Uint32(b[offset+4 : offset+8])
+	length := binary.BigEndian.Uint16(b[offset+8 : offset+10])
+	offset += 10
+
+	if offset+int(length) > len(b) {
+		return DNSAnswers{}, 0, fmt.Errorf("not enough data for DNS answer")
+	}
+
+	data := net.IP(b[offset : offset+int(length)])
+	offset += int(length)
+
+	return DNSAnswers{
+		Name:   name,
+		Type:   qType,
+		Class:  qClass,
+		TTL:    ttl,
+		Length: length,
+		Data:   data,
+	}, offset, nil
 }
