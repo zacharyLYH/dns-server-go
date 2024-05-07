@@ -25,6 +25,7 @@ func (m *Message) Bytes() []byte {
 }
 
 // echo "Your Message" | nc -u 127.0.0.1 2053
+// stage 7 test: dig @127.0.0.1 -p 2053 codecrafters.io A codecrafters.io AAAA
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
@@ -55,7 +56,7 @@ func main() {
 			fmt.Println(err)
 		}
 
-		receivedQuestion, quesErr := ParseDNSQuestion(buf[12:])
+		receivedQuestion, quesErr := ParseDNSQuestion(buf[:size], int(receivedHeader.QuestionCount))
 
 		if quesErr != nil {
 			fmt.Println(err)
@@ -63,20 +64,19 @@ func main() {
 
 		response := Message{}
 
-		response.Answers = []DNSAnswers{{
-			Name:   receivedQuestion,
-			Type:   1,
-			Class:  1,
-			TTL:    60,
-			Length: 4,
-			Data:   "8.8.8.8",
-		}}
+		response.Question = receivedQuestion
 
-		response.Question = []DNSQuestion{{
-			Name:  receivedQuestion,
-			Type:  1,
-			Class: 1,
-		}}
+		for _, ques := range receivedQuestion {
+			answer := DNSAnswers{
+				Name:   ques.Name,
+				Type:   1,
+				Class:  1,
+				TTL:    60,
+				Length: 4,
+				Data:   net.IPv4(8, 8, 8, 8).String(),
+			}
+			response.Answers = append(response.Answers, answer)
+		}
 
 		response.Header = DNSHeader{
 			PacketID:           receivedHeader.PacketID,

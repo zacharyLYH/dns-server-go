@@ -66,33 +66,85 @@ func ParseDNSHeader(b []byte) (*DNSHeader, error) {
 	return header, nil
 }
 
-func ParseDNSQuestion(b []byte) (string, error) {
-	var name []byte
-	ptr := 0
-	// Parse the question name
-	for {
-		if ptr >= len(b) {
-			return "", fmt.Errorf("offset >= len(b)")
-		}
-		length := int(b[ptr])
-		fmt.Printf("Label length: %d, Remaining data: %v\n", length, b[ptr:])
+func ParseDNSQuestion(b []byte, numQuestions int) ([]DNSQuestion, error) {
+	var questions []DNSQuestion
+	ptr := 12
 
-		ptr++
-		if length == 0 {
-			break // Name is terminated by a null byte
+	for i := 0; i < numQuestions; i++ {
+		name, newPtr, err := ParseDNSName(b, ptr)
+		if err != nil {
+			return nil, err
 		}
-		if ptr+length > len(b) {
-			return "", fmt.Errorf("ptr+length > len(b)")
+		ptr = newPtr
+
+		if ptr+4 > len(b) {
+			return nil, errors.New("not enough data for question type and class")
 		}
-		name = append(name, b[ptr:ptr+length]...)
-		name = append(name, '.')
-		ptr += length
+
+		qType := binary.BigEndian.Uint16(b[ptr : ptr+2])
+		qClass := binary.BigEndian.Uint16(b[ptr+2 : ptr+4])
+		ptr += 4
+
+		questions = append(questions, DNSQuestion{Name: name, Type: qType, Class: qClass})
 	}
 
-	// Remove trailing dot
+	return questions, nil
+}
+
+func ParseDNSName(b []byte, offset int) (string, int, error) {
+	var name []byte
+	originalOffset := offset
+	pointerSeen := false
+
+	for {
+		if offset >= len(b) {
+			return "", 0, fmt.Errorf("offset >= len(b)")
+		}
+
+		length := int(b[offset])
+
+		if length&0xC0 == 0xC0 {
+			if offset+1 >= len(b) {
+				return "", 0, fmt.Errorf("pointer at offset %d is incomplete", offset)
+			}
+			if !pointerSeen {
+				originalOffset = offset + 2
+				pointerSeen = true
+			}
+
+			pointerOffset := int(binary.BigEndian.Uint16(b[offset:offset+2]) & 0x3FFF)
+			if pointerOffset >= len(b) {
+				return "", 0, fmt.Errorf("pointer offset >= len(b)")
+			}
+
+			partialName, _, err := ParseDNSName(b, pointerOffset)
+			if err != nil {
+				return "", 0, err
+			}
+			name = append(name, partialName...)
+			offset += 2
+			break
+		}
+
+		offset++
+		if length == 0 {
+			break
+		}
+		if offset+length > len(b) {
+			return "", 0, fmt.Errorf("length > len(b)")
+		}
+
+		name = append(name, b[offset:offset+length]...)
+		name = append(name, '.')
+		offset += length
+	}
+
 	if len(name) > 0 {
 		name = name[:len(name)-1]
 	}
 
-	return string(name), nil
+	if pointerSeen {
+		return string(name), originalOffset, nil
+	}
+	return string(name), offset, nil
 }
